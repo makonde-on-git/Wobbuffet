@@ -1,0 +1,8 @@
+aiohttp
+asyncpg>=0.13
+colorthief
+discord.py
+fuzzywuzzy
+more_itertools
+psutil
+python-dateutil>=2.6
