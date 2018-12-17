@@ -75,7 +75,7 @@ def main():
     while True:
 
         # call the bot with it's args, and return the exit code
-        code = subprocess.call([sys.executable, "-m", "wobbuffet-bot", *bot_args])
+        code = subprocess.call(["wobbuffet-bot", *bot_args])
 
         # if clean shutdown
         if code == 0:

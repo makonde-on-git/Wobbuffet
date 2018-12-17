@@ -13,8 +13,6 @@ import argparse
 import asyncio
 import sys
 
-sys.path.append('.')
-
 import discord
 
 from wobbuffet.core import Bot, logger, context

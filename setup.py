@@ -12,6 +12,7 @@ setup(
     name='Wobbuffet',
     version='0.0.1',
     author='Makonde',
+    author_email="makonde.fasc@gmail.com",
     url='https://github.com/makonde-on-git/Wobbuffet',
     license='GPLv3',
     description='A Discord Bot for Pokemon Go communities, dedicated to PvP.',
