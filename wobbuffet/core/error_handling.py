@@ -52,8 +52,6 @@ def missing_arg_msg(ctx):
 class ErrorHandler:
 
     async def on_command_error(self, ctx, error):
-        prefix = ctx.prefix.replace(ctx.bot.user.mention, '@' + ctx.bot.user.name)
-
         if isinstance(error, commands.MissingRequiredArgument):
             await ctx.bot.send_cmd_help(
                 ctx, title='Missing Arguments', msg_type='error')
@@ -84,53 +82,20 @@ class ErrorHandler:
             await ctx.send(message)
 
         elif isinstance(error, commands.CommandNotFound):
-            pass
+            error = await ctx.send("Command not found.")
+            await asyncio.sleep(10)
+            await delete_error(ctx.message, error)
+
         elif isinstance(error, commands.CheckFailure):
             pass
+
         elif isinstance(error, commands.NoPrivateMessage):
             await ctx.send("That command is not available in DMs.")
+
         elif isinstance(error, commands.CommandOnCooldown):
             await ctx.send("This command is on cooldown. "
                            "Try again in {:.2f}s"
                            "".format(error.retry_after))
-
-        elif isinstance(error, errors.PvPChannelCheckFail):
-            msg = _('Please use **{prefix}{cmd_name}** in any of the PvP channels:').format(cmd_name=ctx.invoked_with, prefix=prefix)
-            pvp_channels = bot.guild_dict[ctx.guild.id]['configure_dict']['pvp']['report_channels']
-            for channel in pvp_channels:
-                channel_name = discord.utils.get(ctx.guild.channels, id=channel)
-                if channel_name:
-                    msg += '\n' + channel_name.mention
-                else:
-                    msg += '\n#deleted-channel'
-            error = await ctx.channel.send(msg)
-            await asyncio.sleep(10)
-            await delete_error(ctx.message, error)
-
-        elif isinstance(error, errors.NonPvPChannelCheckFail):
-            msg = _("**{prefix}{cmd_name}** can't be used in a PvP channel.").format(cmd_name=ctx.invoked_with, prefix=prefix)
-            error = await ctx.channel.send(msg)
-            await asyncio.sleep(10)
-            await delete_error(ctx.message, error)
-
-        elif isinstance(error, errors.RankingChannelCheckFail):
-            msg = _('Please use **{prefix}{cmd_name}** in any of ranking channels:').format(cmd_name=ctx.invoked_with, prefix=prefix)
-            ranking_channels = bot.guild_dict[guild.id]['configure_dict']['pvp']['ranking_channel']
-            for channel in ranking_channels:
-                channel_name = discord.utils.get(ctx.guild.channels, id=channel)
-                if channel_name:
-                    msg += '\n' + channel.mention
-                else:
-                    msg += '\n#deleted-channel'
-            error = await ctx.channel.send(msg)
-            await asyncio.sleep(10)
-            await delete_error(ctx.message, error)
-
-        elif isinstance(error, errors.NonRankingChannelCheckFail):
-            msg = _("**{prefix}{cmd_name}** can't be used in a ranking channel.").format(cmd_name=ctx.invoked_with, prefix=prefix)
-            error = await ctx.channel.send(msg)
-            await asyncio.sleep(10)
-            await delete_error(ctx.message, error)
 
 
 def setup(bot):

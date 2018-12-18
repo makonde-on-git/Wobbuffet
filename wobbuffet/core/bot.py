@@ -210,8 +210,8 @@ class Bot(commands.AutoShardedBot):
         if message.author.bot:
             return
         ctx = await self.get_context(message, cls=Context)
-        if not ctx.command:
-            return
+        # if not ctx.command:
+        #     return
         await self.invoke(ctx)
 
     def match(self, data_list, item):
