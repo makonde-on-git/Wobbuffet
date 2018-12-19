@@ -119,6 +119,11 @@ class Context(commands.Context):
         return await self.embed(
             title, details, msg_type='info', send=send, **options)
 
+    async def help(self, title, details=None, send=True, **options):
+        """Quick send or build an help/question embed response."""
+        return await self.embed(
+            title, details, msg_type='help', send=send, **options)
+
     async def warning(self, title, details=None, send=True, **options):
         """Quick send or build an info embed response."""
         return await self.embed(
@@ -140,7 +145,7 @@ class Context(commands.Context):
                     value = value[1]
                 embed.add_field(name=key, value=value, inline=ilf)
         if footer:
-            footer = {'text':footer}
+            footer = {'text': footer}
             if footer_icon:
                 footer['icon_url'] = footer_icon
             embed.set_footer(**footer)
@@ -245,9 +250,9 @@ class Context(commands.Context):
 
         emoji_list = []
         emoji_lookup = {}
+        if not options and not custom_reacts:
+            options = ['true', 'false']
         for key, item in react_dict.items():
-            if not options and not custom_reacts:
-                options = ['true', 'false']
             if options:
                 if key not in options:
                     continue
@@ -263,10 +268,10 @@ class Context(commands.Context):
 
         author_id = author_id or self.author.id
 
-        def check(emoji, message_id, channel_id, user_id):
-            if message_id != msg.id or user_id != author_id:
+        def check(payload):
+            if payload.message_id != msg.id or payload.user_id != author_id:
                 return False
-            return is_valid_emoji(str(emoji))
+            return is_valid_emoji(str(payload.emoji))
 
         for emoji in emoji_list:
             # str cast in case of _ProxyEmoji
@@ -275,9 +280,9 @@ class Context(commands.Context):
             await msg.add_reaction(emoji)
 
         try:
-            emoji, *__, = await self.bot.wait_for('raw_reaction_add', check=check, timeout=timeout)
+            emoji = await self.bot.wait_for('raw_reaction_add', check=check, timeout=timeout)
             # str cast in case of _ProxyEmojis
-            return emoji_lookup[str(emoji)]
+            return emoji_lookup[str(emoji.emoji)]
         except asyncio.TimeoutError:
             return None
         finally:

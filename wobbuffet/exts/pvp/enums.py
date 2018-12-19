@@ -15,3 +15,17 @@ class League(Enum):
 
     def __int__(self):
         return self.value
+
+    @staticmethod
+    def get_league(name):
+        for league in League:
+            if league.fullname == name:
+                return league
+        return None
+
+    @staticmethod
+    def get_all_leagues():
+        leagues = []
+        for league in League:
+            leagues.append(league.fullname)
+        return leagues

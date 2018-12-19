@@ -5,6 +5,7 @@ from wobbuffet import Cog, command
 
 from .enums import League
 
+
 class Elo:
 
     def __init__(self, initial: int, k: int):
@@ -22,6 +23,10 @@ class Elo:
         p1_new_points = p1_points + int(self.k * (1 - p1_expected))
         p2_new_points = p2_points + int(self.k * (0 - p2_expected))
         return p1_new_points, p2_new_points
+
+    def get_initial(self):
+        return self.initial
+
 
 class Data:
 
@@ -59,6 +64,11 @@ class Data:
             query.values(points=int(points))
         await query.commit()
 
+    async def clear_league_data(self, guild_id, league: League):
+        week_table = self.bot.dbi.table('pvp_week')
+        query = week_table.query().where(guild_id=guild_id, league=int(league))
+        await query.delete()
+
 
 class PvP(Cog):
 
@@ -68,42 +78,108 @@ class PvP(Cog):
         self.db = Data(bot)
 
     # todo add channel check
+    # todo add permissions
     @command()
-    async def won_vs(self, ctx, *, defeted_player_mention):
-        """Set your Pokemon Go team."""
+    async def reset(self, ctx, *, league):
+        """Resets all players stats for given league"""
+
+        to_delete = [ctx.message]
+        league_enum = League.get_league(league)
+        if league_enum is None:
+            to_delete.append(
+                await ctx.error("Niepoprawna liga. Dostępne ligi: {}".format(', '.join(League.get_all_leagues()))))
+            await asyncio.sleep(10)
+            await ctx.channel.delete_messages(to_delete)
+            return
+
+        should_delete = await ctx.ask(
+            await ctx.help(
+                "Skasuję dane wszystkich graczy dla ligi '{}'. Czy jesteś pewny?".format(league_enum.fullname),
+                send=False),
+            timeout=15)
+
+        if should_delete is None:
+            to_delete.append(await ctx.warning("Za wolno, spróbuj jeszcze raz."))
+            await asyncio.sleep(5)
+            await ctx.channel.delete_messages(to_delete)
+            return
+
+        if should_delete is False:
+            to_delete.append(await ctx.error("Anulowane"))
+            await asyncio.sleep(5)
+            await ctx.channel.delete_messages(to_delete)
+            return
+
+        await self.db.clear_league_data(ctx.guild.id, league_enum)
+        await ctx.channel.delete_messages(to_delete)
+        await ctx.success("Dane dla ligi {} skasowane.".format(league_enum.fullname))
+
+    # todo add channel check
+    @command()
+    async def won_vs(self, ctx, *, pokonany_gracz):
+        """Zgłoś wygraną przeciw innemu graczowi. @zawołaj go w komendzie."""
 
         to_delete = [ctx.message]
         player_1_id = ctx.message.author.id
         if len(ctx.message.mentions) != 1:
-            to_delete.append(await ctx.send("Użyj @nick żeby wskazać kogo pokonałeś."))
+            to_delete.append(await ctx.error("Użyj @nick żeby wskazać kogo pokonałeś."))
             await asyncio.sleep(10)
             await ctx.channel.delete_messages(to_delete)
             return
 
         player_2_id = ctx.message.mentions[0].id
         if player_1_id == player_2_id:
-            to_delete.append(await ctx.send("Nie możesz walczyć sam ze sobą!"))
+            to_delete.append(await ctx.error("Nie możesz walczyć sam ze sobą!"))
             await asyncio.sleep(10)
             await ctx.channel.delete_messages(to_delete)
             return
 
-        # todo add confirmation
+        member_1 = ctx.guild.get_member(player_1_id)
+        member_2 = ctx.guild.get_member(player_2_id)
+
+        approved = await ctx.ask(
+            await ctx.help("Potwierdzenie wyniku", fields={"Potwierdzasz przegraną": member_2.mention}, send=False),
+            timeout=15, author_id=player_2_id)
+        approved = True
+        if approved is None:
+            status = {
+                "Wygrana zgłoszona przez": member_1.mention,
+                "Brak potwierdzenia przez": member_2.mention,
+                "Dogadajcie się i zgłoś jeszcze raz": ""
+            }
+            await ctx.warning("Problem", fields=status)
+            await asyncio.sleep(5)
+            await ctx.channel.delete_messages(to_delete)
+            return
+
+        if not approved:
+            status = {
+                "Wygrana zgłoszona przez": member_1.mention,
+                "Zaprzeczenie przez": member_2.mention,
+                "Dogadajcie się i zgłoś jeszcze raz.": "Albo nie."
+            }
+            await ctx.error("Zaprzeczenie", fields=status)
+            await asyncio.sleep(5)
+            await ctx.channel.delete_messages(to_delete)
+            return
 
         #to_delete.append(await ctx.send("channel: {}".format(ctx.channel.id)))
         #to_delete.append(await ctx.send("channel name: {}".format(ctx.bot.get_channel(ctx.channel.id))))
 
         p1_points = await self.db.get_player_points(ctx.guild.id, player_1_id, League.TEST)
         p2_points = await self.db.get_player_points(ctx.guild.id, player_2_id, League.TEST)
+        p1_points = p1_points or self.elo.get_initial()
+        p2_points = p2_points or self.elo.get_initial()
         p1_new_points, p2_new_points = self.elo.calculate_new_score(p1_points, p2_points)
-        member_1 = ctx.guild.get_member(player_1_id)
-        member_2 = ctx.guild.get_member(player_2_id)
-        to_delete.append(await ctx.send("{}: {} -> {}".format(member_1.name, p1_points, p1_new_points)))
-        to_delete.append(await ctx.send("{}: {} -> {}".format(member_2.name, p2_points, p2_new_points)))
         await self.db.store_player_points(
             ctx.guild.id, player_1_id, p1_new_points, League.TEST, True if not p1_points else False)
         await self.db.store_player_points(
             ctx.guild.id, player_2_id, p2_new_points, League.TEST, True if not p1_points else False)
         await self.db.store_result(ctx.guild.id, player_1_id, player_2_id, League.TEST)
 
-        await asyncio.sleep(60)
         await ctx.channel.delete_messages(to_delete)
+        status = {
+            "Zwycięzca": "{}, +{} ({})".format(member_1.mention, p1_new_points-p1_points, p1_new_points),
+            "Przegrany": "{}, {} ({})".format(member_2.mention, p2_new_points-p2_points, p2_new_points),
+        }
+        await ctx.success("Gratulacje!", fields=status)

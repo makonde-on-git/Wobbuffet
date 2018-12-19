@@ -203,7 +203,7 @@ class Bot(commands.AutoShardedBot):
         return category if category in categories else None
 
     async def process_commands(self, message):
-        """Processes commands that are registed with the bot and it's groups.
+        """Processes commands that are registered with the bot and it's groups.
         Without this being run in the main `on_message` event, commands will
         not be processed.
         """
