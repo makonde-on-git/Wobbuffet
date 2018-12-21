@@ -73,7 +73,9 @@ class PvP(Cog):
 
     async def _ranking(self, ctx, league, ranking: Ranking):
         to_delete = [ctx.message]
-        if not pvp_checks.is_proper_channel(ctx, self.config['ranking_channels']):
+        if not await pvp_checks.is_proper_channel(ctx, self.config['ranking_channels']):
+            to_delete.append(await ctx.error("Niewłaściwy kanał"))
+            await asyncio.sleep(5)
             await ctx.channel.delete_messages(to_delete)
             return
         league_enum = League.get_league(league)
@@ -100,7 +102,9 @@ class PvP(Cog):
     async def _refresh(self, ctx, *, league=None):
         """Przeładowuje rankingi dla zadanej ligi lub wszystkich lig"""
         to_delete = [ctx.message]
-        if not pvp_checks.is_proper_channel(ctx, self.config['manage_channels']):
+        if not await pvp_checks.is_proper_channel(ctx, self.config['manage_channels']):
+            to_delete.append(await ctx.error("Niewłaściwy kanał"))
+            await asyncio.sleep(5)
             await ctx.channel.delete_messages(to_delete)
             return
         if league is not None:
@@ -151,7 +155,9 @@ class PvP(Cog):
     async def _reset(self, ctx, *, league, ranking: Ranking):
         """Resets all players stats for given league"""
         to_delete = [ctx.message]
-        if not pvp_checks.is_proper_channel(ctx, self.config['manage_channels']):
+        if not await pvp_checks.is_proper_channel(ctx, self.config['manage_channels']):
+            to_delete.append(await ctx.error("Niewłaściwy kanał"))
+            await asyncio.sleep(5)
             await ctx.channel.delete_messages(to_delete)
             return
 
