@@ -1,96 +1,16 @@
 import asyncio
-import time
 
 from wobbuffet import Cog, command
 from wobbuffet.utils.pagination import Pagination
+from wobbuffet.core import checks
 
 from .enums import League, Ranking
+from .elo import Elo
+from .data import Data
+from . import checks as pvp_checks
 
 
-class Elo:
-
-    def __init__(self, initial: int, k: int):
-        self.initial = initial
-        self.k = k
-
-    def calculate_new_score(self, p1_points=None, p2_points=None):
-        """Calculates new points for two players. Assuming player 1 won, no draws possible."""
-        p1_points = self.initial if p2_points is None else p1_points
-        p2_points = self.initial if p2_points is None else p2_points
-        p1_rating = pow(10, p1_points/400)
-        p2_rating = pow(10, p2_points/400)
-        p1_expected = p1_rating / (p1_rating + p2_rating)
-        p2_expected = p2_rating / (p1_rating + p2_rating)
-        p1_new_points = p1_points + int(self.k * (1 - p1_expected))
-        p2_new_points = p2_points + int(self.k * (0 - p2_expected))
-        return p1_new_points, p2_new_points
-
-    def get_initial(self):
-        return self.initial
-
-
-class Data:
-
-    def __init__(self, bot):
-        self.bot = bot
-
-    async def store_result(self, guild_id, player1, player2, league: League):
-        history_table = self.bot.dbi.table('pvp_history')
-        query = history_table.insert()
-        d = {
-            'guild_id': guild_id,
-            'time': int(time.time()),
-            'player1': int(player1),
-            'player2': int(player2),
-            'league': int(league.value)
-        }
-        query.row(**d)
-        await query.commit()
-
-    async def get_player_points(self, guild_id, player, league: League, ranking: Ranking):
-        table = self.bot.dbi.table(ranking.table_name)
-        query = table.query().select().where(guild_id=guild_id, player=player, league=int(league.value))
-        data = await query.get()
-        if data:
-            return data[0]['points']
-        return None
-
-    async def store_player_points(self, guild_id, player, points, league: League, ranking: Ranking, is_new=False):
-        table = self.bot.dbi.table(ranking.table_name)
-        if is_new:
-            query = table.insert()
-            query.row(guild_id=guild_id, player=player, league=int(league.value), points=int(points))
-        else:
-            query = table.update().where(guild_id=guild_id, player=player, league=int(league.value))
-            query.values(points=int(points))
-        await query.commit()
-
-    async def clear_league_data(self, guild_id, league: League, ranking: Ranking):
-        table = self.bot.dbi.table(ranking.table_name)
-        query = table.query().where(guild_id=guild_id, league=int(league.value))
-        await query.delete()
-
-    async def get_league_and_ranking_data(self, guild_id, league: League, ranking: Ranking):
-        table = self.bot.dbi.table(ranking.table_name)
-        query = table.query().select('row_number() OVER(ORDER BY points DESC) as rank', 'player', 'points')\
-            .where(guild_id=guild_id, league=int(league.value))
-        return await query.get()
-
-    async def get_league_data(self, guild_id, league: League):
-        data = {}
-        for ranking in Ranking:
-            data[ranking] = await self.get_league_and_ranking_data(guild_id, league, ranking)
-        return data
-
-    async def get_all_data(self, guild_id):
-        data = {}
-        for league in League:
-            data[league] = await self.get_league_data(self, guild_id, league)
-        return data
-
-
-class E:
-
+class PaginationElement:
     def __init__(self, string):
         self.qualified_name = string
         self.usage = None
@@ -98,12 +18,18 @@ class E:
 
 
 class PvP(Cog):
-
     def __init__(self, bot):
         self.bot = bot
-        self.elo = Elo(1000, 32)
         self.db = Data(bot)
-        self.confirmation_timeout = 0.1  # in minutes
+        self.config = None
+
+    async def _initialize(self, guild_id):
+        if self.config is not None:
+            return
+        # initialize config
+        self.config = await self.db.read_config(guild_id)
+        # initialize elo
+        self.elo = Elo(self.config['elo_initial'], self.config['elo_k'])
         self.points = {}
         self.player_points = {}
         for league in League:
@@ -112,40 +38,71 @@ class PvP(Cog):
             for ranking in Ranking:
                 self.points[league][ranking] = []
                 self.player_points[league][ranking] = {}
+        # initialize points
+        leagues = [l for l in League]
+        await self._refresh_points(guild_id, leagues)
 
-    @command()
-    async def ranking(self, ctx, *, league):
-        """"""
-
+    @command(name='pvp_config', category='PvP')
+    @checks.is_co_owner()
+    async def _config(self, ctx):
+        await self._check_initialization(ctx.guild.id)
         to_delete = [ctx.message]
+        for k, v in self.config.items():
+            to_delete.append(await ctx.send("{}: {}".format(k, v)))
+        await asyncio.sleep(30)
+        await ctx.channel.delete_messages(to_delete)
+        return
+
+    @command(name='pvp_ranking_week', category='PvP')
+    async def _ranking_week(self, ctx, *, league):
+        """Wyświetla tygodniowy ranking danej ligi"""
+        await self._check_initialization(ctx.guild.id)
+        await self._ranking(ctx, league, Ranking.WEEKLY)
+
+    @command(name='pvp_ranking_month', category='PvP')
+    async def _ranking_month(self, ctx, *, league):
+        """Wyświetla miesięczny ranking danej ligi"""
+        await self._check_initialization(ctx.guild.id)
+        await self._ranking(ctx, league, Ranking.MONTHLY)
+
+    @command(name='pvp_ranking_all', category='PvP')
+    async def _ranking_all(self, ctx, *, league):
+        """Wyświetla ranking wszechczasów danej ligi"""
+        await self._check_initialization(ctx.guild.id)
+        await self._ranking(ctx, league, Ranking.ALL_TIME)
+
+    async def _ranking(self, ctx, league, ranking: Ranking):
+        to_delete = [ctx.message]
+        if not pvp_checks.is_proper_channel(ctx, self.config['ranking_channels']):
+            await ctx.channel.delete_messages(to_delete)
+            return
         league_enum = League.get_league(league)
         if league_enum is None:
-            to_delete.append(
-                await ctx.error("Niepoprawna liga. Dostępne ligi: {}"
-                                .format(', '.join([l.fullname for l in League]))))
+            to_delete.append(await ctx.error("Niepoprawna liga. Dostępne ligi: {}"
+                                             .format(', '.join([l.fullname for l in League]))))
             await asyncio.sleep(10)
             await ctx.channel.delete_messages(to_delete)
             return
 
-        ranking_enum = Ranking.WEEKLY
-        strings = []
-        for row in self.points[league_enum][ranking_enum]:
+        elements = []
+        for row in self.points[league_enum][ranking]:
             member = ctx.guild.get_member(row['player'])
             if member and member.name:
-                strings.append(E("#{} **{}** {}".format(row['rank'], member.name, row['points'])))
+                elements.append(PaginationElement("#{} **{}** {}".format(row['rank'], member.name, row['points'])))
         await ctx.channel.delete_messages(to_delete)
-        p = Pagination(ctx, strings, per_page=5, show_entry_count=False, title='Ranking', msg_type='info',
-                       category_name='Liga "{}" ranking {}'.format(league_enum.fullname, ranking_enum.print_name),
+        p = Pagination(ctx, elements, per_page=10, show_entry_count=False, title='Ranking', msg_type='info',
+                       category_name='Liga "{}" ranking {}'.format(league_enum.fullname, ranking.print_name),
                        simple_footer=True, allow_stop=True, allow_index=False, timeout=30)
         await p.paginate()
 
-    # todo add channel check
-    # todo add permissions
-    @command()
-    async def refresh_points(self, ctx, *, league=None):
-        """Refreshes all players points for given league or all"""
-
+    @command(name='pvp_refresh_points', category='PvP')
+    @checks.is_co_owner()
+    async def _refresh(self, ctx, *, league=None):
+        """Przeładowuje rankingi dla zadanej ligi lub wszystkich lig"""
         to_delete = [ctx.message]
+        if not pvp_checks.is_proper_channel(ctx, self.config['manage_channels']):
+            await ctx.channel.delete_messages(to_delete)
+            return
         if league is not None:
             league_enum = League.get_league(league)
             if league_enum is None:
@@ -173,13 +130,31 @@ class PvP(Cog):
                     player_points[ranking][row['player']] = row
             self.player_points[league] = player_points
 
-    # todo add channel check
-    # todo add permissions
-    @command()
-    async def reset(self, ctx, *, league):
-        """Resets all players stats for given league"""
+    @command(name='pvp_reset_week', category='PvP')
+    @checks.is_co_owner()
+    async def _reset_week(self, ctx, *, league):
+        """Resetuje tygodniowy ranking dla danej ligi"""
+        await self._ranking(ctx, league, Ranking.WEEKLY)
 
+    @command(name='pvp_reset_month', category='PvP')
+    @checks.is_co_owner()
+    async def _reset_month(self, ctx, *, league):
+        """Resetuje miesięczny ranking dla danej ligi"""
+        await self._ranking(ctx, league, Ranking.MONTHLY)
+
+    @command(name='pvp_reset_all', category='PvP')
+    @checks.is_co_owner()
+    async def _reset_all(self, ctx, *, league):
+        """Resetuje ranking wszechczasów dla danej ligi"""
+        await self._ranking(ctx, league, Ranking.ALL_TIME)
+
+    async def _reset(self, ctx, *, league, ranking: Ranking):
+        """Resets all players stats for given league"""
         to_delete = [ctx.message]
+        if not pvp_checks.is_proper_channel(ctx, self.config['manage_channels']):
+            await ctx.channel.delete_messages(to_delete)
+            return
+
         league_enum = League.get_league(league)
         if league_enum is None:
             to_delete.append(
@@ -191,7 +166,7 @@ class PvP(Cog):
 
         should_delete = await ctx.ask(
             await ctx.help(
-                "Skasuję dane wszystkich graczy dla ligi '{}'. Czy jesteś pewny?".format(league_enum.fullname),
+                "Skasuję ranking {} dla ligi '{}'. Czy jesteś pewny?".format(ranking.print_name, league_enum.fullname),
                 send=False),
             timeout=15)
 
@@ -207,16 +182,35 @@ class PvP(Cog):
             await ctx.channel.delete_messages(to_delete)
             return
 
-        await self.db.clear_league_data(ctx.guild.id, league_enum)
+        await self.db.clear_league_data(ctx.guild.id, league_enum, ranking)
+        await self._refresh_points(ctx.guild.id, [league_enum])
         await ctx.channel.delete_messages(to_delete)
-        await ctx.success("Dane dla ligi {} skasowane.".format(league_enum.fullname))
+        await ctx.success("Ranking {} ligi {} skasowany.".format(ranking.print_name, league_enum.fullname))
 
-    # todo add channel check
-    @command()
-    async def won_vs(self, ctx, *, pokonany_gracz):
-        """Zgłoś wygraną przeciw innemu graczowi. @zawołaj go w komendzie."""
+    async def _check_initialization(self, guild_id):
+        if self.config is None:
+            await self._initialize(guild_id)
+
+    @command(name='pvp_won_vs', category='PvP')
+    async def _won_vs(self, ctx, *, pokonany_gracz):
+        """Zgłoś wygraną przeciw innemu graczowi. @zawołaj go w komendzie"""
+        await self._check_initialization(ctx.guild.id)
 
         to_delete = [ctx.message]
+        if not await pvp_checks.is_proper_channel(ctx, self.config['league_channels']):
+            to_delete.append(await ctx.error("Niewłaściwy kanał"))
+            await asyncio.sleep(5)
+            await ctx.channel.delete_messages(to_delete)
+            return
+
+        channel_name = ctx.channel.name
+        league = League.get_league(channel_name)
+        if league is None:
+            to_delete.append(await ctx.error("Niewłaściwy kanał"))
+            await asyncio.sleep(5)
+            await ctx.channel.delete_messages(to_delete)
+            return
+
         player_1_id = ctx.message.author.id
         if len(ctx.message.mentions) != 1:
             to_delete.append(await ctx.error("Użyj @nick żeby wskazać kogo pokonałeś."))
@@ -236,7 +230,7 @@ class PvP(Cog):
 
         approved = await ctx.ask(
             await ctx.help("Potwierdzenie wyniku", fields={"Potwierdzasz przegraną": member_2.mention}, send=False),
-            timeout=60*self.confirmation_timeout, author_id=player_2_id)
+            timeout=60*self.config['confirmation_timeout'], author_id=player_2_id)
         approved = True  # todo hack
         if approved is None:
             status = {
@@ -260,20 +254,18 @@ class PvP(Cog):
             await ctx.channel.delete_messages(to_delete)
             return
 
-        points = await self._update_rankings(ctx.guild.id, player_1_id, player_2_id, League.TEST)
-        await self._refresh_points(ctx.guild.id, [League.TEST])
-        #to_delete.append(await ctx.send("channel: {}".format(ctx.channel.id)))
-        #to_delete.append(await ctx.send("channel name: {}".format(ctx.bot.get_channel(ctx.channel.id))))
+        points = await self._update_rankings(ctx.guild.id, player_1_id, player_2_id, league)
+        await self._refresh_points(ctx.guild.id, [league])
 
         await ctx.channel.delete_messages(to_delete)
         status = {}
         for ranking in Ranking:
             status['Ranking ' + ranking.print_name] = "#{} {} +{} ({})\n#{} {} {} ({})".format(
-                self.player_points[League.TEST][ranking][player_1_id]['rank'],
+                self.player_points[league][ranking][player_1_id]['rank'],
                 member_1.name,
                 points[ranking]['p1_new']-points[ranking]['p1_old'],
                 points[ranking]['p1_new'],
-                self.player_points[League.TEST][ranking][player_2_id]['rank'],
+                self.player_points[league][ranking][player_2_id]['rank'],
                 member_2.name,
                 points[ranking]['p2_new'] - points[ranking]['p2_old'],
                 points[ranking]['p2_new'])
