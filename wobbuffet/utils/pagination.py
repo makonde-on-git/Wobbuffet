@@ -26,13 +26,19 @@ class Pagination:
     interface exits automatically.
     """
     def __init__(self, ctx, entries, *, per_page=12, show_entry_count=True,
-                 title='Help', msg_type='help'):
+                 title='Help', msg_type='help', timeout=120,
+                 category_name="Commands", simple_footer=False, allow_stop=True, allow_index=True):
         self.bot = ctx.bot
+        self.msg_type = msg_type
+        self.title = title
+        self.timeout = timeout
         self.entries = entries
         self.message = ctx.message
         self.channel = ctx.channel
         self.author = ctx.author
         self.per_page = per_page
+        self.category_name = category_name
+        self.simple_footer = simple_footer
         pages, left_over = divmod(len(self.entries), self.per_page)
         if left_over:
             pages += 1
@@ -49,13 +55,14 @@ class Pagination:
             ('\N{BLACK LEFT-POINTING TRIANGLE}', self.previous_page),
             ('\N{BLACK RIGHT-POINTING TRIANGLE}', self.next_page),
             ('\N{BLACK RIGHT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR}',
-             self.last_page),
-            ('\N{BLACK SQUARE FOR STOP}', self.stop_pages),
-            ('\N{LEDGER}', self.show_index),
+             self.last_page)
         ]
+        if allow_stop:
+            self.reaction_emojis.append(('\N{BLACK SQUARE FOR STOP}', self.stop_pages))
+        if allow_index:
+            self.reaction_emojis.append(('\N{LEDGER}', self.show_index))
         self.current_page = 0
         self.match = None
-        self.title = ''
         self.description = ''
         self.prefix = self.cleanup_prefix(ctx.bot, ctx.prefix)
 
@@ -123,24 +130,23 @@ class Pagination:
         entries = self.get_page(page)
 
         self.embed.clear_fields()
-        self.embed.title = self.title
-        self.embed.description = self.description
+        footer = None
         if self.maximum_pages:
             if self.maximum_pages > 1:
-                self.embed.set_footer(text=(
-                    'Page {0}/{1} ({2} commands) | '
-                    'Use {3}help <command> for more details.'
-                ).format(page, self.maximum_pages, self.total, self.prefix))
+                if self.simple_footer:
+                    footer = 'Strona {0}/{1}'.format(page, self.maximum_pages)
+                else:
+                    footer = 'Page {0}/{1} ({2} commands) | Use {3}help <command> for more details.'\
+                        .format(page, self.maximum_pages, self.total, self.prefix)
             else:
-                self.embed.set_footer(text=(
-                    'Use {}help <command> for more details.').format(
-                        self.prefix))
-        else:
-            self.embed.set_footer(text=(
-                'Use {}help <command> for more details.').format(self.prefix))
+                if not self.simple_footer:
+                    footer = 'Use {}help <command> for more details.'.format(self.prefix)
+        elif not self.simple_footer:
+            footer = 'Use {}help <command> for more details.'.format(self.prefix)
+        self.embed = make_embed(title=self.title, msg_type=self.msg_type, footer=footer)
+        self.embed.description = self.description
 
         signature = self._command_signature
-
         requirements = getattr(self, 'requirements', [])
         if requirements:
             cmd_msg = ""
@@ -158,12 +164,7 @@ class Pagination:
                     "{}\n"
                 ).format(signature(entry))
             self.embed.add_field(
-                name="Commands", value=f"{cmd_msg}", inline=False)
-
-        if self.maximum_pages:
-            self.embed.set_author(
-                icon_url=self.default_icon,
-                name=f'Help')
+                name=self.category_name, value=f"{cmd_msg}", inline=False)
 
         if not self.paginating:
             return await self.channel.send(embed=self.embed)
@@ -314,10 +315,11 @@ class Pagination:
                 reaction, user = await self.bot.wait_for(
                     'reaction_add',
                     check=self.react_check,
-                    timeout=120.0)
+                    timeout=self.timeout)
             except asyncio.TimeoutError:
                 self.paginating = False
                 try:
+                    await self.message.delete()
                     await self.message.clear_reactions()
                 except:
                     pass

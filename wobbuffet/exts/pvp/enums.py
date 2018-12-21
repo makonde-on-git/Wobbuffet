@@ -13,19 +13,22 @@ class League(Enum):
         member.fullname = name
         return member
 
-    def __int__(self):
-        return self.value
-
     @staticmethod
     def get_league(name):
         for league in League:
-            if league.fullname == name:
+            if league.fullname.lower() == name.lower():
                 return league
         return None
 
-    @staticmethod
-    def get_all_leagues():
-        leagues = []
-        for league in League:
-            leagues.append(league.fullname)
-        return leagues
+
+class Ranking(Enum):
+    WEEKLY = 0, 'pvp_week', 'tygodniowy'
+    MONTHLY = 10, 'pvp_month', 'miesięczny'
+    ALL_TIME = 20, 'pvp_all_time', 'wszechczasów'
+
+    def __new__(cls, value, name, print_name):
+        member = object.__new__(cls)
+        member._value_ = value
+        member.table_name = name
+        member.print_name = print_name
+        return member
