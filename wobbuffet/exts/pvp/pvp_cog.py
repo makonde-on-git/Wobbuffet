@@ -23,12 +23,14 @@ class PvP(Cog):
         self.db = Data(bot)
         self.config = None
 
-    async def _initialize(self, guild_id):
+    async def _initialize(self, guild_id, reinitialize=False):
         if self.config is not None:
+            if reinitialize:
+                self.config = await self.db.read_config(guild_id)
+                self.elo = Elo(self.config['elo_initial'], self.config['elo_k'])
+                # todo recount points based on history table?
             return
-        # initialize config
         self.config = await self.db.read_config(guild_id)
-        # initialize elo
         self.elo = Elo(self.config['elo_initial'], self.config['elo_k'])
         self.points = {}
         self.player_points = {}
@@ -44,11 +46,46 @@ class PvP(Cog):
 
     @command(name='pvp_config', category='PvP')
     @checks.is_co_owner()
-    async def _config(self, ctx):
-        await self._check_initialization(ctx.guild.id)
+    async def _config(self, ctx, *, action=None, field=None, value=None):
+        """Wyświetla lub modyfikuje konfigurację"""
         to_delete = [ctx.message]
+        await self._check_initialization(ctx.guild.id)
+        if not await pvp_checks.is_proper_channel(ctx, self.config['manage_channels']):
+            to_delete.append(await ctx.error("Niewłaściwy kanał"))
+            await asyncio.sleep(5)
+            await ctx.channel.delete_messages(to_delete)
+            return
+        if action is not None:
+            if action not in ["set", "reset"]:
+                to_delete.append(await ctx.error("Niewłaściwa akcja. Dostępne akcje to: **set** i **reset**"))
+                await asyncio.sleep(10)
+                await ctx.channel.delete_messages(to_delete)
+                return
+            defaults = self.db.get_defaults()
+            if field not in defaults.keys():
+                to_delete.append(await ctx.error("Niewłaściwe ustawienie. Dostępne ustawienia to: **" + "**, **".join(defaults.keys()) + "**"))
+                await asyncio.sleep(10)
+                await ctx.channel.delete_messages(to_delete)
+                return
+            if action == "reset":
+                value = None
+            if action == "set" and value is None:
+                to_delete.append(await ctx.error("Brak wartości dla ustawienia **{}**".format(field)))
+                await asyncio.sleep(10)
+                await ctx.channel.delete_messages(to_delete)
+                return
+            result = self.db.set_config(ctx.guild.id, field, value)
+            if result is not None:
+                to_delete.append(await ctx.error("Błąd podczas zmiany wartości ustawienia **{}**: {}".format(field, result)))
+                await asyncio.sleep(15)
+                await ctx.channel.delete_messages(to_delete)
+                return
+            await self._check_initialization(ctx.guild.id, reinitialize=True)
+            to_delete.append(await ctx.success("Zmieniono wartość pola **{}** na {}".format(field, "domyślną" if value is None else value)))
+        message = []
         for k, v in self.config.items():
-            to_delete.append(await ctx.send("{}: {}".format(k, v)))
+            message.append("{}: {}".format(k, v))
+        to_delete(await ctx.info("Aktualne wartości ustawień", "\n".join(message)))
         await asyncio.sleep(30)
         await ctx.channel.delete_messages(to_delete)
         return
@@ -193,9 +230,9 @@ class PvP(Cog):
         await ctx.channel.delete_messages(to_delete)
         await ctx.success("Ranking {} ligi {} skasowany.".format(ranking.print_name, league_enum.fullname))
 
-    async def _check_initialization(self, guild_id):
-        if self.config is None:
-            await self._initialize(guild_id)
+    async def _check_initialization(self, guild_id, reinitialize=False):
+        if self.config is None or reinitialize:
+            await self._initialize(guild_id, reinitialize)
 
     @command(name='pvp_won_vs', category='PvP')
     async def _won_vs(self, ctx, *, pokonany_gracz):
@@ -237,7 +274,6 @@ class PvP(Cog):
         approved = await ctx.ask(
             await ctx.help("Potwierdzenie wyniku", fields={"Potwierdzasz przegraną": member_2.mention}, send=False),
             timeout=60*self.config['confirmation_timeout'], author_id=player_2_id)
-        approved = True  # todo hack
         if approved is None:
             status = {
                 "Wygrana zgłoszona przez": member_1.mention,

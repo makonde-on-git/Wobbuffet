@@ -8,7 +8,7 @@ Big (really big, like huge) part of the code is based on Meowth v3 bot by FoglyO
 and Scragly. Big kudos for awesome work they do!
 """
 
-__version__ = "0.0.9"
+__version__ = "0.1.0"
 
 __author__ = "Makonde"
 __credits__ = ["Makonde", "FoglyOgly", "Scragly"]

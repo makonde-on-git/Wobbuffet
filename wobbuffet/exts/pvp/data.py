@@ -7,13 +7,28 @@ class Data:
     def __init__(self, bot):
         self.bot = bot
         self.defaults = {
-            'elo_initial': (1000, lambda x: int(x)),
-            'elo_k': (32, lambda x: int(x)),
-            'confirmation_timeout': (0.1, lambda x: float(x)),
+            'elo_initial': (1000, lambda x: int(x)),  # initial points for the new player
+            'elo_k': (32, lambda x: int(x)),  # k value for elo algorithm
+            'confirmation_timeout': (5, lambda x: float(x)),  # default confirmation timeout, in minutes
             'manage_channels': (0, lambda x: list(map(lambda y: int(y), x.split(',')))),
             'ranking_channels': (0, lambda x: list(map(lambda y: int(y), x.split(',')))),
             'league_channels': (0, lambda x: list(map(lambda y: int(y), x.split(',')))),
         }
+
+    def get_defaults(self):
+        return self.defaults
+
+    async def set_config(self, guild_id, field, value=None):
+        try:
+            if value is None:
+                value = self.defaults[field][0]
+            config_table = self.bot.dbi.table('pvp_config')
+            query = config_table.query.update().where(guild_id=guild_id)
+            query.values({field: value})
+            query.commit()
+        except Exception as e:
+            return e
+        return None
 
     async def read_config(self, guild_id):
         config_table = self.bot.dbi.table('pvp_config')
