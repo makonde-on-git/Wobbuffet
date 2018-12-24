@@ -47,7 +47,8 @@ class Data:
                     pass
         return config
 
-    async def store_result(self, guild_id, player1, player2, league: League):
+    async def store_result(self, guild_id, player1, player2, league: League,
+                           p1_pre_points, p1_post_points, p2_pre_points, p2_post_points):
         history_table = self.bot.dbi.table('pvp_history')
         query = history_table.insert()
         d = {
@@ -55,7 +56,11 @@ class Data:
             'time': int(time.time()),
             'player1': int(player1),
             'player2': int(player2),
-            'league': int(league.value)
+            'league': int(league.value),
+            'player1_pre_points': int(p1_pre_points),
+            'player2_pre_points': int(p2_pre_points),
+            'player1_post_points': int(p1_post_points),
+            'player2_post_points': int(p2_post_points)
         }
         query.row(**d)
         await query.commit()

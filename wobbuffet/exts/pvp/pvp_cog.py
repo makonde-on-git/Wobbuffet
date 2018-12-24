@@ -343,7 +343,6 @@ class PvP(Cog):
 
     async def _update_rankings(self, guild_id, player_1_id, player_2_id, league: League):
         points = {}
-        await self.db.store_result(guild_id, player_1_id, player_2_id, league)
         for ranking in Ranking:
             p1_points = await self.db.get_player_points(guild_id, player_1_id, league, ranking)
             p2_points = await self.db.get_player_points(guild_id, player_2_id, league, ranking)
@@ -358,4 +357,7 @@ class PvP(Cog):
                 'p2_old': p2_points,
                 'p2_new': p2_new_points
             }
+        await self.db.store_result(guild_id, player_1_id, player_2_id, league,
+                                   points[ranking.ALL_TIME]['p1_old'], points[ranking.ALL_TIME]['p1_new'],
+                                   points[ranking.ALL_TIME]['p2_old'], points[ranking.ALL_TIME]['p2_new'])
         return points

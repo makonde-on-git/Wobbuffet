@@ -10,6 +10,10 @@ def setup(bot):
         schema.IDColumn('player1', primary_key=True),
         schema.IDColumn('player2', primary_key=True),
         schema.IDColumn('league', primary_key=True),
+        schema.IDColumn('player1_pre_points'),
+        schema.IDColumn('player2_pre_points'),
+        schema.IDColumn('player1_post_points'),
+        schema.IDColumn('player2_post_points'),
     ]
 
     pvp_tables = [pvp_history_table]
