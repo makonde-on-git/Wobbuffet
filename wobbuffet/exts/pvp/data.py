@@ -19,13 +19,15 @@ class Data:
         return self.defaults
 
     async def set_config(self, guild_id, field, value=None):
+        if field not in self.defaults.keys():
+            return "Niewłaściwe ustawienie"
         try:
-            if value is None:
+            if value is None:  #reset to default value
                 value = self.defaults[field][0]
             config_table = self.bot.dbi.table('pvp_config')
-            query = config_table.query.update().where(guild_id=guild_id)
-            query.values({field: value})
-            query.commit()
+            data = {'guild_id': guild_id, field: str(value)}
+            query = config_table.query.insert().row(**data)
+            query.commit(do_update=True)
         except Exception as e:
             return e
         return None
@@ -37,10 +39,12 @@ class Data:
         config = {}
         for k, v in self.defaults.items():
             config[k] = v[0]
-        if data:
-            for k, v in self.defaults.items():
-                if k in data:
-                    config[k] = v[1](data[k])
+        for row in data:
+            if row['config_field'] in self.defaults.keys():
+                try:
+                    config[row['config_field']] = v[1](data[row['config_value']])
+                except:
+                    pass
         return config
 
     async def store_result(self, guild_id, player1, player2, league: League):
@@ -66,6 +70,7 @@ class Data:
 
     async def store_player_points(self, guild_id, player, points, league: League, ranking: Ranking, is_new=False):
         table = self.bot.dbi.table(ranking.table_name)
+        # todo change to insert with commit(do_update=True) after test
         if is_new:
             query = table.insert()
             query.row(guild_id=guild_id, player=player, league=int(league.value), points=int(points))

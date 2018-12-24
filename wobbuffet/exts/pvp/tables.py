@@ -26,12 +26,8 @@ def setup(bot):
     pvp_config_table = bot.dbi.table('pvp_config')
     pvp_config_table.new_columns = [
         schema.IDColumn('guild_id', primary_key=True),
-        schema.IntColumn('elo_initial'),
-        schema.IntColumn('elo_k'),
-        schema.DecimalColumn('confirmation_timeout', precision=5, scale=2),
-        schema.StringColumn('manage_channels'),
-        schema.StringColumn('ranking_channels'),
-        schema.StringColumn('league_channels')
+        schema.StringColumn('config_field', primary_key=True),
+        schema.StringColumn('config_value')
     ]
     pvp_tables.append(pvp_config_table)
 
