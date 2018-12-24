@@ -234,6 +234,34 @@ class PvP(Cog):
         if self.config is None or reinitialize:
             await self._initialize(guild_id, reinitialize)
 
+    @command(name='pvp_rank', category='PvP')
+    async def _rank(self, ctx):
+        """Sprawdź swój ranking"""
+        await self._check_initialization(ctx.guild.id)
+
+        to_delete = [ctx.message]
+        if not await pvp_checks.is_proper_channel(ctx, self.config['ranking_channels']):
+            to_delete.append(await ctx.error("Niewłaściwy kanał"))
+            await asyncio.sleep(5)
+            await ctx.channel.delete_messages(to_delete)
+            return
+
+        player_id = ctx.message.author.id
+        member = ctx.guild.get_member(player_id)
+        status = {}
+        for ranking in Ranking:
+            messages = []
+            for league in League:
+                messages.append("{}: #{} {}".format(league.fullname,
+                                                    self.player_points[league][ranking][player_id]['rank'],
+                                                    self.player_points[league][ranking][player_id]['points']))
+            messages = "\n".join(messages)
+            status['Ranking ' + ranking.print_name] = messages
+        await ctx.channel.delete_messages(to_delete)
+        to_delete = [await ctx.success("Rankingi {}".format(member.name), fields=status)]
+        await asyncio.sleep(30)
+        await ctx.channel.delete_messages(to_delete)
+
     @command(name='pvp_won_vs', category='PvP')
     async def _won_vs(self, ctx, *, pokonany_gracz):
         """Zgłoś wygraną przeciw innemu graczowi. @zawołaj go w komendzie"""
