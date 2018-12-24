@@ -7,12 +7,12 @@ class Data:
     def __init__(self, bot):
         self.bot = bot
         self.defaults = {
-            'elo_initial': (1000, lambda x: int(x)),  # initial points for the new player
-            'elo_k': (32, lambda x: int(x)),  # k value for elo algorithm
-            'confirmation_timeout': (5, lambda x: float(x)),  # default confirmation timeout, in minutes
-            'manage_channels': (0, lambda x: list(map(lambda y: int(y), x.split(',')))),
-            'ranking_channels': (0, lambda x: list(map(lambda y: int(y), x.split(',')))),
-            'league_channels': (0, lambda x: list(map(lambda y: int(y), x.split(',')))),
+            'elo_initial': (1000, lambda x: int(x), False),  # initial points for the new player
+            'elo_k': (32, lambda x: int(x), False),  # k value for elo algorithm
+            'confirmation_timeout': (5, lambda x: float(x), True),  # default confirmation timeout, in minutes
+            'manage_channels': (0, lambda x: list(map(lambda y: int(y), x.split(','))), True),
+            'ranking_channels': (0, lambda x: list(map(lambda y: int(y), x.split(','))), True),
+            'league_channels': (0, lambda x: list(map(lambda y: int(y), x.split(','))), True),
         }
 
     def get_defaults(self):
@@ -21,6 +21,8 @@ class Data:
     async def set_config(self, guild_id, field, value=None):
         if field not in self.defaults.keys():
             return "Niewłaściwe ustawienie"
+        if not self.defaults[field][2]:
+            return "To ustawienie nie może być zmienianie"
         try:
             if value is None:  #reset to default value
                 value = self.defaults[field][0]

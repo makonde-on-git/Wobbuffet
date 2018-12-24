@@ -62,8 +62,9 @@ class PvP(Cog):
                 await ctx.channel.delete_messages(to_delete)
                 return
             defaults = self.db.get_defaults()
-            if field not in defaults.keys():
-                to_delete.append(await ctx.error("Niewłaściwe ustawienie. Dostępne ustawienia to: **" + "**, **".join(defaults.keys()) + "**"))
+            if field not in defaults.keys() or not defaults[field][2]:
+                to_delete.append(await ctx.error("Niewłaściwe ustawienie. Dostępne ustawienia to: **" + "**, **".
+                                                 join([x for x in defaults.keys() if defaults[x][2]]) + "**"))
                 await asyncio.sleep(10)
                 await ctx.channel.delete_messages(to_delete)
                 return
