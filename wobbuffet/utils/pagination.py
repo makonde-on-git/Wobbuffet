@@ -307,6 +307,8 @@ class Pagination:
         first_page = self.show_page(1, first=True)
         if not self.paginating:
             await first_page
+            await asyncio.sleep(self.timeout)
+            await first_page.delete()
         else:
             self.bot.loop.create_task(first_page)
 

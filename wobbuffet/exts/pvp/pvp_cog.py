@@ -312,7 +312,7 @@ class PvP(Cog):
             status = {
                 "Wygrana zgłoszona przez": member_1.mention,
                 "Brak potwierdzenia przez": member_2.mention,
-                "Dogadajcie się i zgłoś jeszcze raz": ""
+                "Dogadajcie się i zgłoś jeszcze raz": "Albo nie."
             }
             await ctx.warning("Problem", fields=status)
             await asyncio.sleep(5)
