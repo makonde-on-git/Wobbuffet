@@ -18,7 +18,7 @@ def setup(bot):
 
     pvp_tables = [pvp_history_table]
     for ranking in Ranking:
-        table = bot.dbi.table(ranking.print_name)
+        table = bot.dbi.table(ranking.table_name)
         table.new_columns = [
             schema.IDColumn('guild_id', primary_key=True),
             schema.IDColumn('player', primary_key=True),

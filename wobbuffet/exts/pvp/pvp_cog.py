@@ -24,11 +24,9 @@ class PvP(Cog):
         self.config = None
 
     async def _initialize(self, guild_id, reinitialize=False):
-        if self.config is not None:
-            if reinitialize:
-                self.config = await self.db.read_config(guild_id)
-                self.elo = Elo(self.config['elo_initial'], self.config['elo_k'])
-                # todo recount points based on history table?
+        if self.config is not None or reinitialize:
+            self.config = await self.db.read_config(guild_id)
+            self.elo = Elo(self.config['elo_initial'], self.config['elo_k'])
             return
         self.config = await self.db.read_config(guild_id)
         self.elo = Elo(self.config['elo_initial'], self.config['elo_k'])
@@ -46,7 +44,7 @@ class PvP(Cog):
 
     @command(name='pvp_config', category='PvP')
     @checks.is_co_owner()
-    async def _config(self, ctx, *, action=None, field=None, value=None):
+    async def _config(self, ctx, action=None, field=None, value=None):
         """Wyświetla lub modyfikuje konfigurację"""
         to_delete = [ctx.message]
         await self._check_initialization(ctx.guild.id)
@@ -55,38 +53,42 @@ class PvP(Cog):
             await asyncio.sleep(5)
             await ctx.channel.delete_messages(to_delete)
             return
+        if action == "reload":
+            await self._check_initialization(ctx.guild.id, reinitialize=True)
+            action = None
+        actions = ["set", "reset", "reload"]
         if action is not None:
-            if action not in ["set", "reset"]:
-                to_delete.append(await ctx.error("Niewłaściwa akcja. Dostępne akcje to: **set** i **reset**"))
+            if action not in actions:
+                to_delete.append(await ctx.error("Niewłaściwa akcja. Dostępne akcje to: " + ",".join(actions)))
                 await asyncio.sleep(10)
                 await ctx.channel.delete_messages(to_delete)
                 return
             defaults = self.db.get_defaults()
             if field not in defaults.keys() or not defaults[field][2]:
-                to_delete.append(await ctx.error("Niewłaściwe ustawienie. Dostępne ustawienia to: **" + "**, **".
-                                                 join([x for x in defaults.keys() if defaults[x][2]]) + "**"))
+                to_delete.append(await ctx.error("Niewłaściwe ustawienie. Dostępne ustawienia to: " +
+                                                 ",".join([x for x in defaults.keys() if defaults[x][2]])))
                 await asyncio.sleep(10)
                 await ctx.channel.delete_messages(to_delete)
                 return
             if action == "reset":
                 value = None
             if action == "set" and value is None:
-                to_delete.append(await ctx.error("Brak wartości dla ustawienia **{}**".format(field)))
+                to_delete.append(await ctx.error("Brak wartości dla ustawienia {}".format(field)))
                 await asyncio.sleep(10)
                 await ctx.channel.delete_messages(to_delete)
                 return
-            result = self.db.set_config(ctx.guild.id, field, value)
+            result = await self.db.set_config(ctx.guild.id, field, value)
             if result is not None:
-                to_delete.append(await ctx.error("Błąd podczas zmiany wartości ustawienia **{}**: {}".format(field, result)))
+                to_delete.append(await ctx.error("Błąd podczas zmiany wartości ustawienia {}: {}".format(field, result)))
                 await asyncio.sleep(15)
                 await ctx.channel.delete_messages(to_delete)
                 return
             await self._check_initialization(ctx.guild.id, reinitialize=True)
-            to_delete.append(await ctx.success("Zmieniono wartość pola **{}** na {}".format(field, "domyślną" if value is None else value)))
+            to_delete.append(await ctx.success("Zmieniono wartość pola {} na {}".format(field, "domyślną" if value is None else value)))
         message = []
         for k, v in self.config.items():
             message.append("{}: {}".format(k, v))
-        to_delete(await ctx.info("Aktualne wartości ustawień", "\n".join(message)))
+        to_delete.append(await ctx.info("Aktualne wartości ustawień", "\n".join(message)))
         await asyncio.sleep(30)
         await ctx.channel.delete_messages(to_delete)
         return
@@ -176,21 +178,21 @@ class PvP(Cog):
     @checks.is_co_owner()
     async def _reset_week(self, ctx, *, league):
         """Resetuje tygodniowy ranking dla danej ligi"""
-        await self._ranking(ctx, league, Ranking.WEEKLY)
+        await self._reset(ctx, league, Ranking.WEEKLY)
 
     @command(name='pvp_reset_month', category='PvP')
     @checks.is_co_owner()
     async def _reset_month(self, ctx, *, league):
         """Resetuje miesięczny ranking dla danej ligi"""
-        await self._ranking(ctx, league, Ranking.MONTHLY)
+        await self._reset(ctx, league, Ranking.MONTHLY)
 
     @command(name='pvp_reset_all', category='PvP')
     @checks.is_co_owner()
     async def _reset_all(self, ctx, *, league):
         """Resetuje ranking wszechczasów dla danej ligi"""
-        await self._ranking(ctx, league, Ranking.ALL_TIME)
+        await self._reset(ctx, league, Ranking.ALL_TIME)
 
-    async def _reset(self, ctx, *, league, ranking: Ranking):
+    async def _reset(self, ctx, league, ranking: Ranking):
         """Resets all players stats for given league"""
         to_delete = [ctx.message]
         if not await pvp_checks.is_proper_channel(ctx, self.config['manage_channels']):
@@ -253,9 +255,12 @@ class PvP(Cog):
         for ranking in Ranking:
             messages = []
             for league in League:
-                messages.append("{}: #{} {}".format(league.fullname,
-                                                    self.player_points[league][ranking][player_id]['rank'],
-                                                    self.player_points[league][ranking][player_id]['points']))
+                if player_id not in self.player_points[league][ranking]:
+                    messages.append("{}: brak rankingu".format(league.fullname))
+                else:
+                    messages.append("{}: #{} {}".format(league.fullname,
+                                                        self.player_points[league][ranking][player_id]['rank'],
+                                                        self.player_points[league][ranking][player_id]['points']))
             messages = "\n".join(messages)
             status['Ranking ' + ranking.print_name] = messages
         await ctx.channel.delete_messages(to_delete)
@@ -340,7 +345,7 @@ class PvP(Cog):
                 member_2.name,
                 points[ranking]['p2_new'] - points[ranking]['p2_old'],
                 points[ranking]['p2_new'])
-        await ctx.success("Gratulacje!", fields=status)
+        await ctx.success("Gratulacje! {} wygrał z {}".format(member_1.name, member_2.name), fields=status)
 
     async def _update_rankings(self, guild_id, player_1_id, player_2_id, league: League):
         points = {}

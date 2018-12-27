@@ -24,12 +24,12 @@ class Data:
         if not self.defaults[field][2]:
             return "To ustawienie nie może być zmienianie"
         try:
-            if value is None:  #reset to default value
+            if value is None:  # reset to default value
                 value = self.defaults[field][0]
             config_table = self.bot.dbi.table('pvp_config')
-            data = {'guild_id': guild_id, field: str(value)}
-            query = config_table.query.insert().row(**data)
-            query.commit(do_update=True)
+            data = {'guild_id': guild_id, 'config_field': field, 'config_value': str(value)}
+            query = config_table.insert().row(**data)
+            await query.commit(do_update=True)
         except Exception as e:
             return e
         return None
@@ -42,10 +42,12 @@ class Data:
         for k, v in self.defaults.items():
             config[k] = v[0]
         for row in data:
-            if row['config_field'] in self.defaults.keys():
+            field = row['config_field']
+            value = row['config_value']
+            if field in self.defaults.keys():
                 try:
-                    config[row['config_field']] = v[1](data[row['config_value']])
-                except:
+                    config[field] = self.defaults[field][1](value)
+                except Exception as e:
                     pass
         return config
 
