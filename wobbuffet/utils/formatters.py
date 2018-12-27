@@ -161,7 +161,7 @@ def convert_to_bool(argument):
 
 
 async def ask(bot, message_list: list, user_list=None, timeout=60, *, react_list=['✅', '❎']):
-    if user_list and user_list is not list:
+    if user_list and type(user_list) is not list:
         user_list = [user_list]
     message_id_list = [x.id for x in message_list]
 
@@ -172,7 +172,7 @@ async def ask(bot, message_list: list, user_list=None, timeout=60, *, react_list
             emoji = payload.emoji.id
         else:
             emoji = str(payload.emoji)
-        if user_list and user_list is list:
+        if user_list and type(user_list) is list:
             return (user_id in user_list) and (message_id in message_id_list) and (emoji in react_list)
         elif not user_list:
             return (user_id != bot.user.id) and (message_id in message_id_list) and (emoji in react_list)
