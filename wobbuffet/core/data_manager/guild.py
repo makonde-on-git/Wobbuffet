@@ -20,9 +20,9 @@ class GuildDM:
                 return None
         if key is not None:
             if value is not None:
-                return await config_table.upsert(
-                    guild_id=self.guild_id,
-                    config_name=str(key), config_value=str(value))
+                config_table.insert(guild_id=self.guild_id, config_name=str(key), config_value=str(value))
+                config_table.insert.primaries('guild_id', 'config_name')
+                return await config_table.insert.commit(do_update=True)
             else:
                 return await self.dbi.settings_stmt.fetchval(
                     self.guild_id, str(key))

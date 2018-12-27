@@ -130,7 +130,8 @@ class PvP(Cog):
         for row in self.points[league_enum][ranking]:
             member = ctx.guild.get_member(row['player'])
             if member and member.name:
-                elements.append(PaginationElement("#{} **{}** {}".format(row['rank'], member.name, row['points'])))
+                name = member.nick if member.nick is not None else member.name
+                elements.append(PaginationElement("#{} **{}** {}".format(row['rank'], name, row['points'])))
         await ctx.channel.delete_messages(to_delete)
         p = Pagination(ctx, elements, per_page=10, show_entry_count=False, title='Ranking', msg_type='info',
                        category_name='Liga "{}" ranking {}'.format(league_enum.fullname, ranking.print_name),
@@ -264,7 +265,8 @@ class PvP(Cog):
             messages = "\n".join(messages)
             status['Ranking ' + ranking.print_name] = messages
         await ctx.channel.delete_messages(to_delete)
-        to_delete = [await ctx.success("Rankingi {}".format(member.name), fields=status)]
+        name = member.nick if member.nick is not None else member.name
+        to_delete = [await ctx.success("Rankingi {}".format(name), fields=status)]
         await asyncio.sleep(30)
         await ctx.channel.delete_messages(to_delete)
 
@@ -335,17 +337,19 @@ class PvP(Cog):
 
         await ctx.channel.delete_messages(to_delete)
         status = {}
+        name_1 = member_1.nick if member_1.nick is not None else member_1.name
+        name_2 = member_2.nick if member_2.nick is not None else member_2.name
         for ranking in Ranking:
             status['Ranking ' + ranking.print_name] = "#{} {} +{} ({})\n#{} {} {} ({})".format(
                 self.player_points[league][ranking][player_1_id]['rank'],
-                member_1.name,
+                name_1,
                 points[ranking]['p1_new']-points[ranking]['p1_old'],
                 points[ranking]['p1_new'],
                 self.player_points[league][ranking][player_2_id]['rank'],
-                member_2.name,
+                name_2,
                 points[ranking]['p2_new'] - points[ranking]['p2_old'],
                 points[ranking]['p2_new'])
-        await ctx.success("Gratulacje! {} wygrał z {}".format(member_1.name, member_2.name), fields=status)
+        await ctx.success("Gratulacje! {} wygrał z {}".format(name_1, name_2), fields=status)
 
     async def _update_rankings(self, guild_id, player_1_id, player_2_id, league: League):
         points = {}
