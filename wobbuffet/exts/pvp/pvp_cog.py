@@ -93,19 +93,19 @@ class PvP(Cog):
         await ctx.channel.delete_messages(to_delete)
         return
 
-    @command(name='pvp_ranking_week', category='PvP')
+    @command(name='pvp_ranking_week', category='PvP', aliases=['rankingtygodniowy'])
     async def _ranking_week(self, ctx, *, league):
         """Wyświetla tygodniowy ranking danej ligi"""
         await self._check_initialization(ctx.guild.id)
         await self._ranking(ctx, league, Ranking.WEEKLY)
 
-    @command(name='pvp_ranking_month', category='PvP')
+    @command(name='pvp_ranking_month', category='PvP', aliases=['rankingmiesieczny'])
     async def _ranking_month(self, ctx, *, league):
         """Wyświetla miesięczny ranking danej ligi"""
         await self._check_initialization(ctx.guild.id)
         await self._ranking(ctx, league, Ranking.MONTHLY)
 
-    @command(name='pvp_ranking_all', category='PvP')
+    @command(name='pvp_ranking_all', category='PvP', aliases=['rankingcalosc'])
     async def _ranking_all(self, ctx, *, league):
         """Wyświetla ranking wszechczasów danej ligi"""
         await self._check_initialization(ctx.guild.id)
@@ -270,8 +270,8 @@ class PvP(Cog):
         await asyncio.sleep(30)
         await ctx.channel.delete_messages(to_delete)
 
-    @command(name='pvp_won_vs', category='PvP')
-    async def _won_vs(self, ctx, *, pokonany_gracz):
+    @command(name='pvp_won_vs', category='PvP', aliases=['wygralemvs', 'winvs', 'wygranavs', 'wygralamvs', 'wonvs'])
+    async def _won_vs(self, ctx, pokonany_gracz):
         """Zgłoś wygraną przeciw innemu graczowi. @zawołaj go w komendzie"""
         await self._check_initialization(ctx.guild.id)
 
@@ -310,7 +310,7 @@ class PvP(Cog):
         approved = await ctx.ask(
             await ctx.help("Potwierdzenie wyniku", fields={"Potwierdzasz przegraną": member_2.mention}, send=False),
             timeout=60*self.config['confirmation_timeout'], author_id=player_2_id)
-        approved=True
+
         if approved is None:
             status = {
                 "Wygrana zgłoszona przez": member_1.mention,
