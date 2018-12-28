@@ -24,6 +24,8 @@ def setup(bot):
             schema.IDColumn('player', primary_key=True),
             schema.IDColumn('points'),
             schema.IDColumn('league', primary_key=True),
+            schema.IDColumn('wins'),
+            schema.IDColumn('losses')
         ]
         pvp_tables.append(table)
 

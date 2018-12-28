@@ -310,6 +310,7 @@ class PvP(Cog):
         approved = await ctx.ask(
             await ctx.help("Potwierdzenie wyniku", fields={"Potwierdzasz przegraną": member_2.mention}, send=False),
             timeout=60*self.config['confirmation_timeout'], author_id=player_2_id)
+        approved=True
         if approved is None:
             status = {
                 "Wygrana zgłoszona przez": member_1.mention,
@@ -343,31 +344,29 @@ class PvP(Cog):
             status['Ranking ' + ranking.print_name] = "#{} {} +{} ({})\n#{} {} {} ({})".format(
                 self.player_points[league][ranking][player_1_id]['rank'],
                 name_1,
-                points[ranking]['p1_new']-points[ranking]['p1_old'],
-                points[ranking]['p1_new'],
+                points[ranking]['p1']['new']-points[ranking]['p1']['old'],
+                points[ranking]['p1']['new'],
                 self.player_points[league][ranking][player_2_id]['rank'],
                 name_2,
-                points[ranking]['p2_new'] - points[ranking]['p2_old'],
-                points[ranking]['p2_new'])
+                points[ranking]['p2']['new'] - points[ranking]['p2']['old'],
+                points[ranking]['p2']['new'])
         await ctx.success("Gratulacje! {} wygrał z {}".format(name_1, name_2), fields=status)
 
     async def _update_rankings(self, guild_id, player_1_id, player_2_id, league: League):
         points = {}
         for ranking in Ranking:
-            p1_points = await self.db.get_player_points(guild_id, player_1_id, league, ranking)
-            p2_points = await self.db.get_player_points(guild_id, player_2_id, league, ranking)
-            p1_points, p1_is_new = (p1_points, False) if p1_points is not None else (self.elo.get_initial(), True)
-            p2_points, p2_is_new = (p2_points, False) if p2_points is not None else (self.elo.get_initial(), True)
+            p1_points, p1_wins, p1_losses = await self.db.get_player_points(guild_id, player_1_id, league, ranking)
+            p2_points, p2_wins, p2_losses = await self.db.get_player_points(guild_id, player_2_id, league, ranking)
+            p1_points, p1_wins, p1_losses = (p1_points, p1_wins+1, p1_losses) if p1_points is not None else\
+                (self.elo.get_initial(), 1, 0)
+            p2_points, p2_wins, p2_losses = (p2_points, p2_wins, p2_losses+1) if p2_points is not None else\
+                (self.elo.get_initial(), 0, 1)
             p1_new_points, p2_new_points = self.elo.calculate_new_score(p1_points, p2_points)
-            await self.db.store_player_points(guild_id, player_1_id, p1_new_points, league, ranking, p1_is_new)
-            await self.db.store_player_points(guild_id, player_2_id, p2_new_points, league, ranking, p2_is_new)
             points[ranking] = {
-                'p1_old': p1_points,
-                'p1_new': p1_new_points,
-                'p2_old': p2_points,
-                'p2_new': p2_new_points
+                'p1': {'old': p1_points, 'new': p1_new_points, 'wins': p1_wins, 'losses': p1_losses, 'id': player_1_id},
+                'p2': {'old': p2_points, 'new': p2_new_points, 'wins': p2_wins, 'losses': p2_losses, 'id': player_2_id}
             }
-        await self.db.store_result(guild_id, player_1_id, player_2_id, league,
-                                   points[ranking.ALL_TIME]['p1_old'], points[ranking.ALL_TIME]['p1_new'],
-                                   points[ranking.ALL_TIME]['p2_old'], points[ranking.ALL_TIME]['p2_new'])
+            await self.db.store_player_points(guild_id, league, ranking, points[ranking]['p1'])
+            await self.db.store_player_points(guild_id, league, ranking, points[ranking]['p2'])
+        await self.db.store_result(guild_id, league, points[Ranking.ALL_TIME])
         return points

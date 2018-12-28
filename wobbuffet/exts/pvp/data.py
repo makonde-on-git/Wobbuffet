@@ -51,20 +51,19 @@ class Data:
                     pass
         return config
 
-    async def store_result(self, guild_id, player1, player2, league: League,
-                           p1_pre_points, p1_post_points, p2_pre_points, p2_post_points):
+    async def store_result(self, guild_id, league: League, points: dict):
         history_table = self.bot.dbi.table('pvp_history')
         query = history_table.insert()
         d = {
             'guild_id': guild_id,
             'time': int(time.time()),
-            'player1': int(player1),
-            'player2': int(player2),
+            'player1': int(points['p1']['id']),
+            'player2': int(points['p2']['id']),
             'league': int(league.value),
-            'player1_pre_points': int(p1_pre_points),
-            'player2_pre_points': int(p2_pre_points),
-            'player1_post_points': int(p1_post_points),
-            'player2_post_points': int(p2_post_points)
+            'player1_pre_points': int(points['p1']['old']),
+            'player2_pre_points': int(points['p2']['old']),
+            'player1_post_points': int(points['p1']['new']),
+            'player2_post_points': int(points['p2']['new'])
         }
         query.row(**d)
         await query.commit()
@@ -74,19 +73,14 @@ class Data:
         query = table.query().select().where(guild_id=guild_id, player=player, league=int(league.value))
         data = await query.get()
         if data:
-            return data[0]['points']
-        return None
+            return data[0]['points'], data[0]['wins'], data[0]['losses']
+        return None, None, None
 
-    async def store_player_points(self, guild_id, player, points, league: League, ranking: Ranking, is_new=False):
+    async def store_player_points(self, guild_id, league: League, ranking: Ranking, points: dict):
         table = self.bot.dbi.table(ranking.table_name)
-        # todo change to insert with commit(do_update=True) after test
-        if is_new:
-            query = table.insert()
-            query.row(guild_id=guild_id, player=player, league=int(league.value), points=int(points))
-        else:
-            query = table.update().where(guild_id=guild_id, player=player, league=int(league.value))
-            query.values(points=int(points))
-        await query.commit()
+        query = table.insert.row(guild_id=guild_id, player=points['id'], league=int(league.value),
+                                 points=int(points['new']), wins=int(points['wins']), losses=int(points['losses']))
+        await query.commit(do_update=True)
 
     async def clear_league_data(self, guild_id, league: League, ranking: Ranking):
         table = self.bot.dbi.table(ranking.table_name)

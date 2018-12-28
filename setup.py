@@ -10,7 +10,7 @@ with open('README.md') as f:
 
 setup(
     name='Wobbuffet',
-    version='0.1.1',
+    version='0.1.5',
     author='Makonde',
     author_email="makonde.fasc@gmail.com",
     url='https://github.com/makonde-on-git/Wobbuffet',
